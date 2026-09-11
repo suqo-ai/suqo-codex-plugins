@@ -1,0 +1,20 @@
+{
+  "name": "suqo-claude-plugin-marketplace",
+  "interface": {
+    "displayName": "suqo-claude-plugin-marketplace"
+  },
+  "plugins": [
+    {
+      "name": "suqo-claude-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/suqo-claude-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "sdk"
+    }
+  ]
+}
