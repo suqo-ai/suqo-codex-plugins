@@ -5,8 +5,8 @@ comment calls that file "the single, complete public export surface... Nothing
 outside this file's exports is part of the public contract." If something is
 not here, it does not exist — say so rather than inventing it.
 
-Package `@suqo/sdk`, ESM + CJS, `strict` TypeScript, Node ≥18. **Not yet
-published** — see `client-setup.md` for what "install" actually means today.
+Package `@suqo/sdk`, ESM + CJS, `strict` TypeScript, Node ≥18. Published on
+npm — see `client-setup.md` for install.
 
 ## `SuqoClient`
 
@@ -163,7 +163,7 @@ code today are all covered in full in `pagination.md`.
 ## `VERSION`
 
 ```ts
-const VERSION: string;   // "0.0.1" today — see client-setup.md on what that means for install
+const VERSION: string;   // the installed package version, e.g. "1.0.0"
 ```
 
 ## Enums / unions
