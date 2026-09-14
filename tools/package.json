@@ -1,0 +1,8 @@
+{
+  "name": "suqo-codex-plugins-tools",
+  "private": true,
+  "description": "Pins the exact acplugin version this repo's conversions are generated with. Run `npx --yes @disdjj/acplugin@<version below>`, not a bare `npx acplugin`, so a future regeneration can't silently pick up a newer/different acplugin behavior.",
+  "devDependencies": {
+    "@disdjj/acplugin": "1.7.0"
+  }
+}

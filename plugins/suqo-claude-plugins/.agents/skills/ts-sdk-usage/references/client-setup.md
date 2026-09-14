@@ -1,25 +1,33 @@
 # Constructing `SuqoClient`
 
-## Install — not yet published
+## Install
 
-`npm view @suqo/sdk` 404s against the real npm registry today. `package.json`
-in the SDK repo is still `0.0.1`, and `specs/versioning.md`'s `1.0.0` row is
-marked "Pending — this ticket's release," not shipped. Don't write
-`npm install @suqo/sdk` as if it works — it doesn't yet. What actually works
-right now:
+`@suqo/sdk` is on the public npm registry:
 
 ```bash
-# from inside the suqo-sdk repo
-npm run build
-npm pack                          # -> suqo-sdk-0.0.1.tgz
-
-# in the consuming project
-npm install /path/to/suqo-sdk-0.0.1.tgz
+npm i @suqo/sdk
 ```
 
-or a direct file/git dependency in `package.json` pointing at the SDK repo,
-until it's actually published. Say plainly which of these you used — don't
-imply a registry install happened if it didn't.
+Pin it the way the consuming project pins its other dependencies; the SDK
+follows semver, so the caret range `npm i` writes by default is the normal
+choice. `npm view @suqo/sdk version` gives the current release.
+
+Releases are automated end-to-end and published through npm OIDC Trusted
+Publishing — there are no long-lived npm tokens — and every release still
+requires a human approval step before it goes live. That matters here only in
+one way: a version that exists in the repo's tags has not necessarily been
+approved and published yet, so check
+<https://www.npmjs.com/package/@suqo/sdk> rather than the repo when you need
+to know what is installable.
+
+Working against an unreleased change (a local SDK checkout) still works the
+usual way — `npm run build && npm pack` in the SDK repo, then install the
+resulting tarball, or a `file:`/git dependency in `package.json`. If you do
+that, say so plainly instead of implying a registry install.
+
+- npm: <https://www.npmjs.com/package/@suqo/sdk>
+- Repo: <https://github.com/suqo-ai/suqo-sdk-ts>
+- Docs: <https://suqo.ai/docs/sdk> — TypeScript: <https://suqo.ai/docs/sdk/typescript/>
 
 ## Constructing the client
 
