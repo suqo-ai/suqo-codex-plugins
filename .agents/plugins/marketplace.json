@@ -1,20 +1,22 @@
 {
-  "name": "suqo-claude-plugin-marketplace",
+  "name": "suqo-claude-plugins-marketplace",
   "interface": {
-    "displayName": "suqo-claude-plugin-marketplace"
+    "displayName": "suqo-claude-plugins-marketplace"
   },
   "plugins": [
     {
-      "name": "suqo-claude-plugin",
+      "name": "suqo-claude-plugins",
       "source": {
         "source": "local",
-        "path": "./plugins/suqo-claude-plugin"
+        "path": "./plugins/suqo-claude-plugins"
       },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "sdk"
+      "category": "sdk",
+      "description": "Skills and SDK usage guides for building apps on top of the SUQO PHP and TypeScript SDKs.",
+      "version": "0.4.0"
     }
   ]
 }
