@@ -26,6 +26,13 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-sync-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-reconcile-scripts:
     runs-on: ubuntu-latest
@@ -50,6 +57,11 @@ jobs:
         id: pinned
         run: echo "sha=$(cat codex-plugins/.source-sync)" >> "$GITHUB_OUTPUT"
 
+      # No token: — relies on suqo-claude-plugins staying public. actions/checkout
+      # can read a public repo with no credentials; if this repo ever goes
+      # private, this step starts failing with an auth error that won't
+      # obviously point back to this line. Add a token with read access to
+      # suqo-claude-plugins here if that ever changes.
       - name: Checkout suqo-claude-plugins at the pinned SHA
         uses: actions/checkout@v4
         with:
@@ -61,6 +73,11 @@ jobs:
         with:
           node-version: 22
 
+      # Pulled fresh from npm every run, no lockfile/integrity check beyond
+      # the version pin — deliberate: a lockfile means a package.json, and
+      # this repo (and the shipped plugin) must stay zero-dependency. The
+      # supply-chain surface for this tool lives here instead; accepted,
+      # not fixed.
       - name: Convert with acplugin (same pinned version as everywhere else)
         run: |
           npx --yes @disdjj/acplugin@1.7.0 convert "$GITHUB_WORKSPACE/claude-plugins" \

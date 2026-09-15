@@ -140,6 +140,38 @@ test('orders keys to match the canonical plugin.json field order', () => {
   }
 });
 
+test('leaves description alone even when source disagrees with it', () => {
+  // description is deliberately absent from FIELDS_TO_RECONCILE in
+  // reconcile-plugin-manifest.mjs, with a comment explaining it already
+  // comes through correctly from acplugin. Every other fixture in this
+  // file happens to give source and generated the same description, so
+  // none of them could ever catch someone undoing that deliberate
+  // exclusion — this is the one that actually would.
+  const { dir, cleanup } = makeTempDir('reconcile-plugin-');
+  try {
+    const sourcePath = join(dir, 'source-plugin.json');
+    const generatedPath = join(dir, 'generated-plugin.json');
+
+    writeJson(sourcePath, {
+      name: 'example-plugin',
+      version: '1.0.0',
+      description: 'Source description that should NOT overwrite the generated one.',
+    });
+    writeJson(generatedPath, {
+      name: 'example-plugin',
+      version: '1.0.0',
+      description: 'Generated description acplugin already produced correctly.',
+    });
+
+    runScript(SCRIPT, [sourcePath, generatedPath]);
+    const result = readJson(generatedPath);
+
+    assert.equal(result.description, 'Generated description acplugin already produced correctly.');
+  } finally {
+    cleanup();
+  }
+});
+
 test('exits non-zero with a usage message when arguments are missing', () => {
   assert.throws(() => runScript(SCRIPT, []), (err) => {
     assert.equal(err.status, 1);
