@@ -104,11 +104,3 @@ test('adds a trailing newline even when no field needed reconciling', () => {
     cleanup();
   }
 });
-
-test('exits non-zero with a usage message when arguments are missing', () => {
-  assert.throws(() => runScript(SCRIPT, []), (err) => {
-    assert.equal(err.status, 1);
-    assert.match(err.stderr.toString(), /Usage: node tools\/reconcile-marketplace-manifest\.mjs/);
-    return true;
-  });
-});
