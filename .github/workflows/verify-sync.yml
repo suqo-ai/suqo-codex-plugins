@@ -1,0 +1,84 @@
+name: Verify Codex sync
+
+# Two independent checks on every PR to main:
+#  1. test-reconcile-scripts: do tools/reconcile-*.mjs still behave correctly?
+#  2. verify-in-sync-with-source: does what's committed under plugins/ and
+#     .agents/plugins/marketplace.json actually match what acplugin + both
+#     reconcile scripts produce from the REAL, current suqo-claude-plugins
+#     source, right now?
+#
+# (2) exists specifically to catch the class of bug a human reviewer had to
+# find by hand once already: content converted from a stale/wrong copy of
+# the source. This makes that check automatic instead of relying on someone
+# noticing.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  test-reconcile-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run reconcile script tests
+        run: node --test tools/*.test.mjs
+
+  verify-in-sync-with-source:
+    runs-on: ubuntu-latest
+    needs: test-reconcile-scripts
+    steps:
+      - name: Checkout suqo-codex-plugins (this repo, the PR's branch)
+        uses: actions/checkout@v4
+        with:
+          path: codex-plugins
+
+      - name: Checkout suqo-claude-plugins (source of truth, fresh)
+        uses: actions/checkout@v4
+        with:
+          repository: suqo-ai/suqo-claude-plugins
+          path: claude-plugins
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Convert with acplugin (same pinned version as everywhere else)
+        run: |
+          npx --yes @disdjj/acplugin@1.7.0 convert "$GITHUB_WORKSPACE/claude-plugins" \
+            --all --to codex -o "$GITHUB_WORKSPACE/scratch"
+
+      - name: Reconcile manifests (same scripts, same order, as any real run)
+        run: |
+          node codex-plugins/tools/reconcile-plugin-manifest.mjs \
+            claude-plugins/.claude-plugin/plugin.json \
+            scratch/.codex-plugin/plugin.json
+          node codex-plugins/tools/reconcile-marketplace-manifest.mjs \
+            scratch/.codex-plugin/plugin.json \
+            scratch/.agents/plugins/marketplace.json
+
+      - name: Assemble the expected repo layout from the conversion output
+        run: |
+          mkdir -p expected/plugins/suqo-claude-plugins
+          cp -r scratch/.codex-plugin expected/plugins/suqo-claude-plugins/.codex-plugin
+          mkdir -p expected/plugins/suqo-claude-plugins/.agents
+          cp -r scratch/.agents/skills expected/plugins/suqo-claude-plugins/.agents/skills
+          mkdir -p expected/.agents/plugins
+          cp scratch/.agents/plugins/marketplace.json expected/.agents/plugins/marketplace.json
+
+      - name: Diff expected output against what's actually committed
+        run: |
+          set -e
+          if ! diff -rq expected/plugins codex-plugins/plugins; then
+            echo "::error::plugins/ in this PR does not match what acplugin + the reconcile scripts produce from the current suqo-claude-plugins main. Re-run the conversion (see tools/reconcile-*.mjs doc comments) and commit the result."
+            exit 1
+          fi
+          if ! diff -q expected/.agents/plugins/marketplace.json codex-plugins/.agents/plugins/marketplace.json; then
+            echo "::error::.agents/plugins/marketplace.json in this PR does not match what the conversion produces from the current source. Re-run the conversion and commit the result."
+            exit 1
+          fi
+          echo "In sync with suqo-ai/suqo-claude-plugins main."
