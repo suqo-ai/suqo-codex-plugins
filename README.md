@@ -10,7 +10,7 @@ Requires the [Codex CLI](https://www.npmjs.com/package/@openai/codex) installed 
 
 ```
 codex plugin marketplace add https://github.com/suqo-ai/suqo-codex-plugins
-codex plugin add suqo-claude-plugins@suqo-claude-plugins-marketplace
+codex plugin add suqo-codex-plugins@suqo-claude-plugins-marketplace
 ```
 
 Once installed, Codex has the SUQO PHP and TypeScript SDK usage skills built in — correct method signatures, common pitfalls, and webhook-handling patterns, without needing to explain any of it per session.
@@ -20,7 +20,7 @@ Once installed, Codex has the SUQO PHP and TypeScript SDK usage skills built in 
 ```
 suqo-codex-plugins/
   .agents/plugins/marketplace.json        # marketplace listing (this repo's own entry)
-  plugins/suqo-claude-plugins/
+  plugins/suqo-codex-plugins/
     .codex-plugin/plugin.json             # plugin manifest
     .agents/skills/
       ts-sdk-usage/                       # SUQO TypeScript SDK skill
@@ -45,11 +45,13 @@ suqo-codex-plugins/
 
 ```bash
 npx --yes @disdjj/acplugin@1.7.0 convert <path-to-suqo-claude-plugins> --all --to codex -o <scratch-dir>
-node tools/reconcile-plugin-manifest.mjs <path-to-suqo-claude-plugins>/.claude-plugin/plugin.json <scratch-dir>/.codex-plugin/plugin.json
-node tools/reconcile-marketplace-manifest.mjs <scratch-dir>/.codex-plugin/plugin.json <scratch-dir>/.agents/plugins/marketplace.json
+node tools/reconcile-plugin-manifest.mjs <path-to-suqo-claude-plugins>/.claude-plugin/plugin.json <scratch-dir>/.codex-plugin/plugin.json --rename-to suqo-codex-plugins
+node tools/reconcile-marketplace-manifest.mjs <scratch-dir>/.codex-plugin/plugin.json <scratch-dir>/.agents/plugins/marketplace.json suqo-claude-plugins --rename-to suqo-codex-plugins
 ```
 
-Copy the result into `plugins/suqo-claude-plugins/` and `.agents/plugins/marketplace.json`, verify with a real `codex plugin add`, and update `.source-sync` to the commit you converted from.
+`acplugin` always names the plugin after the source ("suqo-claude-plugins") regardless of target tool - `--rename-to` overrides that to match this repo's own identity; see [why](#how-this-stays-in-sync) in the reconcile scripts' doc comments.
+
+Copy the result into `plugins/suqo-codex-plugins/` and `.agents/plugins/marketplace.json`, verify with a real `codex plugin add`, and update `.source-sync` to the commit you converted from.
 
 ## License
 
