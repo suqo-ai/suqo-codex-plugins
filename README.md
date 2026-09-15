@@ -1,10 +1,12 @@
 # suqo-codex-plugins
 
-Codex plugin build of [SUQO](https://github.com/suqo-ai)'s SDK-usage skills — automatically kept in sync with [`suqo-ai/suqo-claude-plugins`](https://github.com/suqo-ai/suqo-claude-plugins), the source of truth.
+A Codex plugin providing [SUQO](https://github.com/suqo-ai)'s SDK-usage skills — automatically kept in sync with [`suqo-ai/suqo-claude-plugins`](https://github.com/suqo-ai/suqo-claude-plugins), the source of truth.
 
 This repo isn't hand-written. Its content is generated from the Claude plugin and converted into Codex's plugin format; see [How this stays in sync](#how-this-stays-in-sync) below.
 
 ## Install
+
+Requires the [Codex CLI](https://www.npmjs.com/package/@openai/codex) installed first (`npm install -g @openai/codex`).
 
 ```
 codex plugin marketplace add https://github.com/suqo-ai/suqo-codex-plugins
@@ -24,6 +26,7 @@ suqo-codex-plugins/
       ts-sdk-usage/                       # SUQO TypeScript SDK skill
       php-sdk-usage/                      # SUQO PHP SDK skill
   tools/                                  # scripts used to (re)generate the above - see below
+  .github/workflows/                      # CI that verifies the above stays in sync - see below
   .source-sync                            # the suqo-claude-plugins commit this repo was last synced from
 ```
 
