@@ -112,3 +112,25 @@ test('exits non-zero with a usage message when arguments are missing', () => {
     return true;
   });
 });
+
+test('--rename-to overrides the entry name and updates source.path to match', () => {
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+
+    writeJson(pluginPath, { name: 'suqo-codex-plugins', version: '1.0.0', description: 'x' });
+    writeJson(marketplacePath, {
+      name: 'example-marketplace',
+      plugins: [{ name: 'suqo-claude-plugins', source: { source: 'local', path: './plugins/suqo-claude-plugins' } }],
+    });
+
+    runScript(SCRIPT, [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to', 'suqo-codex-plugins']);
+    const entry = readJson(marketplacePath).plugins[0];
+
+    assert.equal(entry.name, 'suqo-codex-plugins');
+    assert.equal(entry.source.path, './plugins/suqo-codex-plugins');
+  } finally {
+    cleanup();
+  }
+});

@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "suqo-claude-plugins",
+      "name": "suqo-codex-plugins",
       "source": {
         "source": "local",
-        "path": "./plugins/suqo-claude-plugins"
+        "path": "./plugins/suqo-codex-plugins"
       },
       "policy": {
         "installation": "AVAILABLE",

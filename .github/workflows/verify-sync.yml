@@ -83,21 +83,26 @@ jobs:
           npx --yes @disdjj/acplugin@1.7.0 convert "$GITHUB_WORKSPACE/claude-plugins" \
             --all --to codex -o "$GITHUB_WORKSPACE/scratch"
 
+      # --rename-to: acplugin always names the plugin after the source
+      # ("suqo-claude-plugins"), regardless of target tool - renamed here,
+      # in the pipeline, so it can't get silently reverted by a future run.
       - name: Reconcile manifests (same scripts, same order, as any real run)
         run: |
           node codex-plugins/tools/reconcile-plugin-manifest.mjs \
             claude-plugins/.claude-plugin/plugin.json \
-            scratch/.codex-plugin/plugin.json
+            scratch/.codex-plugin/plugin.json \
+            --rename-to suqo-codex-plugins
           node codex-plugins/tools/reconcile-marketplace-manifest.mjs \
             scratch/.codex-plugin/plugin.json \
-            scratch/.agents/plugins/marketplace.json
+            scratch/.agents/plugins/marketplace.json \
+            suqo-claude-plugins --rename-to suqo-codex-plugins
 
       - name: Assemble the expected repo layout from the conversion output
         run: |
-          mkdir -p expected/plugins/suqo-claude-plugins
-          cp -r scratch/.codex-plugin expected/plugins/suqo-claude-plugins/.codex-plugin
-          mkdir -p expected/plugins/suqo-claude-plugins/.agents
-          cp -r scratch/.agents/skills expected/plugins/suqo-claude-plugins/.agents/skills
+          mkdir -p expected/plugins/suqo-codex-plugins
+          cp -r scratch/.codex-plugin expected/plugins/suqo-codex-plugins/.codex-plugin
+          mkdir -p expected/plugins/suqo-codex-plugins/.agents
+          cp -r scratch/.agents/skills expected/plugins/suqo-codex-plugins/.agents/skills
           mkdir -p expected/.agents/plugins
           cp scratch/.agents/plugins/marketplace.json expected/.agents/plugins/marketplace.json
 
