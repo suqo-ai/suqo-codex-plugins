@@ -4,13 +4,22 @@ name: Verify Codex sync
 #  1. test-reconcile-scripts: do tools/reconcile-*.mjs still behave correctly?
 #  2. verify-in-sync-with-source: does what's committed under plugins/ and
 #     .agents/plugins/marketplace.json actually match what acplugin + both
-#     reconcile scripts produce from the REAL, current suqo-claude-plugins
-#     source, right now?
+#     reconcile scripts produce from suqo-claude-plugins at the commit
+#     recorded in .source-sync?
 #
 # (2) exists specifically to catch the class of bug a human reviewer had to
 # find by hand once already: content converted from a stale/wrong copy of
 # the source. This makes that check automatic instead of relying on someone
 # noticing.
+#
+# Deliberately pinned to .source-sync's recorded SHA, not suqo-claude-plugins'
+# live main: an earlier version diffed against whatever main happened to be
+# at run time, which meant any PR here - even one that only touched a
+# README - went red the moment someone landed an unrelated change upstream.
+# Pinning makes this job answer only "did this PR introduce drift", not
+# "has upstream moved since our last sync" (that's check-source-drift.yml's
+# job, on a schedule, opening an issue instead of blocking anything).
+# Every sync commit must update .source-sync to the SHA it converted from.
 
 on:
   pull_request:
@@ -37,10 +46,15 @@ jobs:
         with:
           path: codex-plugins
 
-      - name: Checkout suqo-claude-plugins (source of truth, fresh)
+      - name: Read the pinned source SHA
+        id: pinned
+        run: echo "sha=$(cat codex-plugins/.source-sync)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout suqo-claude-plugins at the pinned SHA
         uses: actions/checkout@v4
         with:
           repository: suqo-ai/suqo-claude-plugins
+          ref: ${{ steps.pinned.outputs.sha }}
           path: claude-plugins
 
       - uses: actions/setup-node@v4
@@ -74,11 +88,11 @@ jobs:
         run: |
           set -e
           if ! diff -rq expected/plugins codex-plugins/plugins; then
-            echo "::error::plugins/ in this PR does not match what acplugin + the reconcile scripts produce from the current suqo-claude-plugins main. Re-run the conversion (see tools/reconcile-*.mjs doc comments) and commit the result."
+            echo "::error::plugins/ in this PR does not match what acplugin + the reconcile scripts produce from suqo-claude-plugins@${{ steps.pinned.outputs.sha }} (the SHA recorded in .source-sync). Re-run the conversion (see tools/reconcile-*.mjs doc comments) and commit the result - if you're intentionally syncing to a newer source commit, update .source-sync to that SHA too."
             exit 1
           fi
           if ! diff -q expected/.agents/plugins/marketplace.json codex-plugins/.agents/plugins/marketplace.json; then
-            echo "::error::.agents/plugins/marketplace.json in this PR does not match what the conversion produces from the current source. Re-run the conversion and commit the result."
+            echo "::error::.agents/plugins/marketplace.json in this PR does not match what the conversion produces from suqo-claude-plugins@${{ steps.pinned.outputs.sha }} (the SHA recorded in .source-sync). Re-run the conversion and commit the result - if you're intentionally syncing to a newer source commit, update .source-sync to that SHA too."
             exit 1
           fi
-          echo "In sync with suqo-ai/suqo-claude-plugins main."
+          echo "In sync with suqo-ai/suqo-claude-plugins@${{ steps.pinned.outputs.sha }}."
