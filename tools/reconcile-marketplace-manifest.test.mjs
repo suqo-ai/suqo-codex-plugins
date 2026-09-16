@@ -159,6 +159,80 @@ test('--rename-to also rewrites the marketplace top-level name and interface.dis
   }
 });
 
+test('running --rename-to twice in a row is a true no-op the second time (idempotency)', () => {
+  // Regression test for a real bug: an earlier version anchored the
+  // rewrite on `entry.name`, which becomes the *new* name after the first
+  // run - so a second run's `findEntry` (matching on the old name only)
+  // couldn't find the entry at all and errored out, rather than settling
+  // cleanly. Using [plugin-name] (a CLI arg, immune to what this script
+  // itself writes) as the anchor, plus a findEntry fallback onto
+  // --rename-to's value, fixes both.
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+
+    writeJson(pluginPath, { name: 'suqo-codex-plugins', version: '0.4.0', description: 'x' });
+    writeJson(marketplacePath, {
+      name: 'suqo-claude-plugins-marketplace',
+      interface: { displayName: 'suqo-claude-plugins-marketplace' },
+      plugins: [{ name: 'suqo-claude-plugins', source: { source: 'local', path: './plugins/suqo-claude-plugins' } }],
+    });
+
+    const args = [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to', 'suqo-codex-plugins'];
+    runScript(SCRIPT, args);
+    const afterFirstRun = readText(marketplacePath);
+
+    const { stdout } = runScript(SCRIPT, args);
+    const afterSecondRun = readText(marketplacePath);
+
+    assert.match(stdout, /No fields needed reconciling/);
+    assert.equal(afterSecondRun, afterFirstRun);
+
+    const result = readJson(marketplacePath);
+    assert.equal(result.name, 'suqo-codex-plugins-marketplace');
+    assert.equal(result.plugins[0].name, 'suqo-codex-plugins');
+  } finally {
+    cleanup();
+  }
+});
+
+test('rejects "--flag=value" syntax instead of silently ignoring it', () => {
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+    writeJson(pluginPath, { name: 'x', version: '1.0.0', description: 'x' });
+    writeJson(marketplacePath, { name: 'm', plugins: [{ name: 'suqo-claude-plugins' }] });
+
+    assert.throws(() => runScript(SCRIPT, [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to=suqo-codex-plugins']), (err) => {
+      assert.equal(err.status, 1);
+      assert.match(err.stderr.toString(), /Unsupported "--flag=value" syntax/);
+      return true;
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('rejects an unrecognized flag instead of silently treating it as positional', () => {
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+    writeJson(pluginPath, { name: 'x' });
+    writeJson(marketplacePath, { name: 'm', plugins: [{ name: 'x' }] });
+
+    assert.throws(() => runScript(SCRIPT, [pluginPath, marketplacePath, '--rename-two', 'y']), (err) => {
+      assert.equal(err.status, 1);
+      assert.match(err.stderr.toString(), /Unrecognized flag: "--rename-two"/);
+      return true;
+    });
+  } finally {
+    cleanup();
+  }
+});
+
 test('--rename-to leaves an unrelated marketplace name alone', () => {
   const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
   try {
