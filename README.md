@@ -46,7 +46,7 @@ suqo-codex-plugins/
 ```bash
 npx --yes @disdjj/acplugin@1.7.0 convert <path-to-suqo-claude-plugins> --all --to codex -o <scratch-dir>
 node tools/reconcile-plugin-manifest.mjs <path-to-suqo-claude-plugins>/.claude-plugin/plugin.json <scratch-dir>/.codex-plugin/plugin.json --rename-to suqo-codex-plugins
-node tools/reconcile-marketplace-manifest.mjs <scratch-dir>/.codex-plugin/plugin.json <scratch-dir>/.agents/plugins/marketplace.json suqo-claude-plugins --rename-to suqo-codex-plugins
+node tools/reconcile-marketplace-manifest.mjs <scratch-dir>/.codex-plugin/plugin.json <scratch-dir>/.agents/plugins/marketplace.json <path-to-suqo-claude-plugins>/.claude-plugin/marketplace.json suqo-claude-plugins --rename-to suqo-codex-plugins
 ```
 
 `acplugin` always names the plugin after the source ("suqo-claude-plugins") regardless of target tool - `--rename-to` overrides that to match this repo's own identity; see [why](#how-this-stays-in-sync) in the reconcile scripts' doc comments.
