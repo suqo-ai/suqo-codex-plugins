@@ -10,7 +10,7 @@ Requires the [Codex CLI](https://www.npmjs.com/package/@openai/codex) installed 
 
 ```
 codex plugin marketplace add https://github.com/suqo-ai/suqo-codex-plugins
-codex plugin add suqo-codex-plugins@suqo-claude-plugins-marketplace
+codex plugin add suqo-codex-plugins@suqo-codex-plugins-marketplace
 ```
 
 Once installed, Codex has the SUQO PHP and TypeScript SDK usage skills built in — correct method signatures, common pitfalls, and webhook-handling patterns, without needing to explain any of it per session.

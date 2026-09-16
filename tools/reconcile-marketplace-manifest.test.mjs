@@ -134,3 +134,48 @@ test('--rename-to overrides the entry name and updates source.path to match', ()
     cleanup();
   }
 });
+
+test('--rename-to also rewrites the marketplace top-level name and interface.displayName', () => {
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+
+    writeJson(pluginPath, { name: 'suqo-codex-plugins', version: '1.0.0', description: 'x' });
+    writeJson(marketplacePath, {
+      name: 'suqo-claude-plugins-marketplace',
+      interface: { displayName: 'suqo-claude-plugins-marketplace' },
+      plugins: [{ name: 'suqo-claude-plugins', source: { source: 'local', path: './plugins/suqo-claude-plugins' } }],
+    });
+
+    runScript(SCRIPT, [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to', 'suqo-codex-plugins']);
+    const result = readJson(marketplacePath);
+
+    assert.equal(result.name, 'suqo-codex-plugins-marketplace');
+    assert.equal(result.interface.displayName, 'suqo-codex-plugins-marketplace');
+    assert.equal(result.plugins[0].name, 'suqo-codex-plugins');
+  } finally {
+    cleanup();
+  }
+});
+
+test('--rename-to leaves an unrelated marketplace name alone', () => {
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+
+    writeJson(pluginPath, { name: 'suqo-codex-plugins', version: '1.0.0', description: 'x' });
+    writeJson(marketplacePath, {
+      name: 'acme-tools-marketplace',
+      plugins: [{ name: 'suqo-claude-plugins', source: { source: 'local', path: './plugins/suqo-claude-plugins' } }],
+    });
+
+    runScript(SCRIPT, [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to', 'suqo-codex-plugins']);
+    const result = readJson(marketplacePath);
+
+    assert.equal(result.name, 'acme-tools-marketplace');
+  } finally {
+    cleanup();
+  }
+});

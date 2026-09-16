@@ -26,6 +26,15 @@
  * Pass the same --rename-to value given to reconcile-plugin-manifest.mjs
  * so the plugin.json and marketplace.json agree on the new name.
  *
+ * It also rewrites any occurrence of the entry's *old* name (whatever it
+ * was called before this rename) inside the marketplace's own top-level
+ * `name` and `interface.displayName` - both are set by acplugin from the
+ * source's own marketplace.json and otherwise keep saying e.g.
+ * "suqo-claude-plugins-marketplace" even after the listed plugin has been
+ * correctly renamed, which is exactly the confusing-branding bug this
+ * whole rename exists to fix. Found by review, not hypothetical: this is
+ * the one part of the marketplace file --rename-to originally missed.
+ *
  * Writes the reconciled marketplace.json back in place, with a trailing
  * newline.
  */
@@ -74,13 +83,32 @@ function main() {
     changed.push(`version: ${JSON.stringify(entry.version) ?? '(absent)'} -> ${JSON.stringify(plugin.version)}`);
     entry.version = plugin.version;
   }
-  if (renameTo !== undefined && entry.name !== renameTo) {
-    changed.push(`name: ${JSON.stringify(entry.name)} -> ${JSON.stringify(renameTo)}`);
-    entry.name = renameTo;
-    if (entry.source && typeof entry.source === 'object') {
-      const newPath = `./plugins/${renameTo}`;
-      changed.push(`source.path: ${JSON.stringify(entry.source.path)} -> ${JSON.stringify(newPath)}`);
-      entry.source.path = newPath;
+  if (renameTo !== undefined) {
+    const oldName = entry.name;
+    if (oldName !== renameTo) {
+      changed.push(`name: ${JSON.stringify(oldName)} -> ${JSON.stringify(renameTo)}`);
+      entry.name = renameTo;
+      if (entry.source && typeof entry.source === 'object') {
+        const newPath = `./plugins/${renameTo}`;
+        changed.push(`source.path: ${JSON.stringify(entry.source.path)} -> ${JSON.stringify(newPath)}`);
+        entry.source.path = newPath;
+      }
+
+      const rename = (str) => str.split(oldName).join(renameTo);
+
+      if (typeof marketplace.name === 'string' && marketplace.name.includes(oldName)) {
+        const before = marketplace.name;
+        marketplace.name = rename(before);
+        changed.push(`marketplace name: ${JSON.stringify(before)} -> ${JSON.stringify(marketplace.name)}`);
+      }
+      if (
+        marketplace.interface && typeof marketplace.interface === 'object' &&
+        typeof marketplace.interface.displayName === 'string' && marketplace.interface.displayName.includes(oldName)
+      ) {
+        const before = marketplace.interface.displayName;
+        marketplace.interface.displayName = rename(before);
+        changed.push(`marketplace interface.displayName: ${JSON.stringify(before)} -> ${JSON.stringify(marketplace.interface.displayName)}`);
+      }
     }
   }
 

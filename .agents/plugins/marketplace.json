@@ -1,7 +1,7 @@
 {
-  "name": "suqo-claude-plugins-marketplace",
+  "name": "suqo-codex-plugins-marketplace",
   "interface": {
-    "displayName": "suqo-claude-plugins-marketplace"
+    "displayName": "suqo-codex-plugins-marketplace"
   },
   "plugins": [
     {
