@@ -159,6 +159,46 @@ test('--rename-to also rewrites the marketplace top-level name and interface.dis
   }
 });
 
+test('does not compound the marketplace-name rewrite when --rename-to itself contains the old name', () => {
+  // Regression test for a real bug: the rewrite used to fire whenever the
+  // current value contained the old name, with no check for whether it
+  // already contained the new one too. If --rename-to's value itself
+  // embeds the old name as a substring (e.g. renaming "suqo-claude-plugins"
+  // to "suqo-claude-plugins-v2"), a second run's marketplace.name already
+  // contains the old name as a prefix of the *already-rewritten* value -
+  // so the naive rewrite fired again and compounded:
+  // "...-marketplace" -> "...-v2-marketplace" -> "...-v2-v2-marketplace".
+  // Reproduced exactly, fixed by also requiring the new name be absent
+  // before rewriting.
+  const { dir, cleanup } = makeTempDir('reconcile-marketplace-');
+  try {
+    const pluginPath = join(dir, 'plugin.json');
+    const marketplacePath = join(dir, 'marketplace.json');
+
+    writeJson(pluginPath, { name: 'suqo-claude-plugins-v2', version: '0.4.0', description: 'x' });
+    writeJson(marketplacePath, {
+      name: 'suqo-claude-plugins-marketplace',
+      interface: { displayName: 'suqo-claude-plugins-marketplace' },
+      plugins: [{ name: 'suqo-claude-plugins', source: { source: 'local', path: './plugins/suqo-claude-plugins' } }],
+    });
+
+    const args = [pluginPath, marketplacePath, 'suqo-claude-plugins', '--rename-to', 'suqo-claude-plugins-v2'];
+    runScript(SCRIPT, args);
+    const afterFirstRun = readJson(marketplacePath).name;
+    assert.equal(afterFirstRun, 'suqo-claude-plugins-v2-marketplace');
+
+    // Three more runs - a naive fix would compound "-v2" onto the name
+    // again on each one.
+    for (let i = 0; i < 3; i++) runScript(SCRIPT, args);
+    const result = readJson(marketplacePath);
+
+    assert.equal(result.name, 'suqo-claude-plugins-v2-marketplace');
+    assert.equal(result.interface.displayName, 'suqo-claude-plugins-v2-marketplace');
+  } finally {
+    cleanup();
+  }
+});
+
 test('running --rename-to twice in a row is a true no-op the second time (idempotency)', () => {
   // Regression test for a real bug: an earlier version anchored the
   // rewrite on `entry.name`, which becomes the *new* name after the first

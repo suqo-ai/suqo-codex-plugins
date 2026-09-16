@@ -46,6 +46,20 @@
  * entry and correctly reports no further changes needed, rather than
  * failing. See the idempotency test.
  *
+ * The marketplace-name/displayName rewrite itself is also guarded against
+ * compounding: it only fires when the current value contains the old name
+ * but NOT the new one already. Unlike reconcile-plugin-manifest.mjs
+ * (which always recomputes homepage/repository fresh from an untouched
+ * source file), this rewrite edits a value that's already been through
+ * this same script before - so if --rename-to's value ever itself
+ * contains the old name as a substring (e.g. renaming
+ * "suqo-claude-plugins" to "suqo-claude-plugins-v2"), a naive
+ * unconditional split/join would re-match on a second run and compound:
+ * "...-marketplace" -> "...-v2-marketplace" -> "...-v2-v2-marketplace".
+ * Found by review, reproduced with exactly that pair, fixed by checking
+ * the new name isn't already present before rewriting - not just relying
+ * on our current name pair happening not to trigger it.
+ *
  * Writes the reconciled marketplace.json back in place, with a trailing
  * newline.
  */
@@ -135,25 +149,20 @@ function main() {
       }
 
       const rename = (str) => str.split(oldName).join(renameTo);
+      // Only rewrite a value that still contains the old name and does NOT
+      // already contain the new one - see the doc comment above for why
+      // the second half of that check exists.
+      const needsRewrite = (str) => typeof str === 'string' && str.includes(oldName) && !str.includes(renameTo);
 
-      if (typeof marketplace.name === 'string' && marketplace.name.includes(oldName)) {
+      if (needsRewrite(marketplace.name)) {
         const before = marketplace.name;
-        const after = rename(before);
-        if (after !== before) {
-          marketplace.name = after;
-          changed.push(`marketplace name: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
-        }
+        marketplace.name = rename(before);
+        changed.push(`marketplace name: ${JSON.stringify(before)} -> ${JSON.stringify(marketplace.name)}`);
       }
-      if (
-        marketplace.interface && typeof marketplace.interface === 'object' &&
-        typeof marketplace.interface.displayName === 'string' && marketplace.interface.displayName.includes(oldName)
-      ) {
+      if (marketplace.interface && typeof marketplace.interface === 'object' && needsRewrite(marketplace.interface.displayName)) {
         const before = marketplace.interface.displayName;
-        const after = rename(before);
-        if (after !== before) {
-          marketplace.interface.displayName = after;
-          changed.push(`marketplace interface.displayName: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
-        }
+        marketplace.interface.displayName = rename(before);
+        changed.push(`marketplace interface.displayName: ${JSON.stringify(before)} -> ${JSON.stringify(marketplace.interface.displayName)}`);
       }
     }
   }
