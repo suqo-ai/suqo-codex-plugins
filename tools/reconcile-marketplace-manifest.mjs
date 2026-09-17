@@ -12,13 +12,16 @@
  *
  * Usage:
  *   node tools/reconcile-marketplace-manifest.mjs \
- *     <reconciled-plugin.json> <generated-marketplace.json> [plugin-name] [--rename-to <name>]
+ *     <reconciled-plugin.json> <generated-marketplace.json> <source-marketplace.json> \
+ *     [plugin-name] [--rename-to <name>]
  *
  * <reconciled-plugin.json> should already have gone through
  * reconcile-plugin-manifest.mjs — this script reads its description/version
- * back out to stamp onto the matching marketplace entry. If the marketplace
- * lists more than one plugin, pass [plugin-name] to target a specific entry;
- * otherwise the first entry is used.
+ * back out to stamp onto the matching marketplace entry. <source-marketplace.json>
+ * is the Claude plugin's own .claude-plugin/marketplace.json - used only to
+ * derive the pre-rename marketplace name (see --rename-to below). If the
+ * marketplace lists more than one plugin, pass [plugin-name] to target a
+ * specific entry; otherwise the first entry is used.
  *
  * --rename-to renames the matched entry's `name` and updates its
  * `source.path` to match (Codex's plugin folder convention is
@@ -26,25 +29,38 @@
  * Pass the same --rename-to value given to reconcile-plugin-manifest.mjs
  * so the plugin.json and marketplace.json agree on the new name.
  *
- * It also rewrites any occurrence of the entry's pre-rename name inside the
- * marketplace's own top-level `name` and `interface.displayName` - both are
- * set by acplugin from the source's own marketplace.json and otherwise keep
- * saying e.g. "suqo-claude-plugins-marketplace" even after the listed
- * plugin has been correctly renamed, which is exactly the
+ * It also rewrites the marketplace's own top-level `name` and
+ * `interface.displayName` when they embed the plugin's pre-rename name -
+ * both are set by acplugin from the source's own marketplace.json and
+ * otherwise keep saying e.g. "suqo-claude-plugins-marketplace" even after
+ * the listed plugin has been correctly renamed, which is exactly the
  * confusing-branding bug this whole rename exists to fix.
  *
- * [plugin-name] doubles as the reliable "pre-rename name" anchor for that
- * rewrite (not `entry.name`, which becomes the *new* name after the first
- * run) - a real bug, found by review and reproduced: reading the anchor
- * from the file this script writes to meant a second run against an
- * already-renamed marketplace.json couldn't find the entry at all
- * (`findEntry` matched on the old name only) and exited with an error.
- * `[plugin-name]` is a CLI argument, not something this script's own
- * output ever changes, so it stays a valid anchor no matter how many times
- * this has already run - and `findEntry` below also falls back to matching
- * on `--rename-to` itself, so a second run finds the (already-renamed)
- * entry and correctly reports no further changes needed, rather than
- * failing. See the idempotency test.
+ * This rewrite is derived fresh from <source-marketplace.json> every run,
+ * not by detecting and editing whatever's already in the generated file -
+ * mirroring reconcile-plugin-manifest.mjs's homepage/repository pattern,
+ * which has the same property for the same reason. Two real bugs came
+ * from an earlier version that instead mutated the generated marketplace's
+ * `name`/`interface.displayName` in place, using substring-presence
+ * heuristics to guess whether a rewrite was still needed - found by
+ * review, both reproduced before fixing:
+ *
+ *   1. Compounding: if --rename-to's value ever itself contained the old
+ *      name as a substring (e.g. "suqo-claude-plugins" -> "suqo-claude-
+ *      plugins-v2"), the old heuristic re-matched on every subsequent run
+ *      and kept re-appending, e.g. "...-v2-marketplace" ->
+ *      "...-v2-v2-marketplace" -> "...-v2-v2-v2-marketplace".
+ *   2. False negative: patching (1) by also requiring the new name be
+ *      *absent* broke the case where the new name coincidentally already
+ *      appeared in the marketplace name for unrelated reasons on a
+ *      genuinely first run - the needed rewrite silently never happened,
+ *      with no error and no line in the reconciled-fields log.
+ *
+ * Deriving the expected value directly from the untouched source every
+ * run - rather than asking "does the current value look already
+ * rewritten?" - has neither failure mode: source never changes, so the
+ * expected value is identical (and correct) no matter how many times this
+ * has already run.
  *
  * Writes the reconciled marketplace.json back in place, with a trailing
  * newline.
@@ -92,14 +108,15 @@ function parseArgs(argv) {
 
 function main() {
   const { positional, renameTo } = parseArgs(process.argv.slice(2));
-  const [pluginJsonPath, marketplaceJsonPath, targetName] = positional;
-  if (!pluginJsonPath || !marketplaceJsonPath) {
-    console.error('Usage: node tools/reconcile-marketplace-manifest.mjs <reconciled-plugin.json> <generated-marketplace.json> [plugin-name] [--rename-to <name>]');
+  const [pluginJsonPath, marketplaceJsonPath, sourceMarketplaceJsonPath, targetName] = positional;
+  if (!pluginJsonPath || !marketplaceJsonPath || !sourceMarketplaceJsonPath) {
+    console.error('Usage: node tools/reconcile-marketplace-manifest.mjs <reconciled-plugin.json> <generated-marketplace.json> <source-marketplace.json> [plugin-name] [--rename-to <name>]');
     process.exit(1);
   }
 
   const plugin = JSON.parse(readFileSync(pluginJsonPath, 'utf8'));
   const marketplace = JSON.parse(readFileSync(marketplaceJsonPath, 'utf8'));
+  const sourceMarketplace = JSON.parse(readFileSync(sourceMarketplaceJsonPath, 'utf8'));
 
   const entry = findEntry(marketplace, targetName, renameTo);
 
@@ -120,8 +137,8 @@ function main() {
   if (renameTo !== undefined) {
     // Prefer the CLI-supplied pre-rename name (stable across runs) over
     // entry.name (which becomes the *new* name after the first run).
-    const oldName = targetName ?? entry.name;
-    if (oldName !== renameTo) {
+    const entryOldName = targetName ?? entry.name;
+    if (entryOldName !== renameTo) {
       if (entry.name !== renameTo) {
         changed.push(`name: ${JSON.stringify(entry.name)} -> ${JSON.stringify(renameTo)}`);
         entry.name = renameTo;
@@ -133,27 +150,28 @@ function main() {
           entry.source.path = newPath;
         }
       }
+    }
 
-      const rename = (str) => str.split(oldName).join(renameTo);
+    // Marketplace-level rewrite: always derived fresh from the untouched
+    // source, never from marketplace.name/interface.displayName - see the
+    // doc comment above for why.
+    const sourceMarketplaceName = sourceMarketplace.name;
+    if (typeof sourceMarketplaceName === 'string') {
+      const expectedName = sourceMarketplaceName.includes(entryOldName)
+        ? sourceMarketplaceName.split(entryOldName).join(renameTo)
+        : sourceMarketplaceName; // doesn't embed the plugin's name - nothing to rename.
 
-      if (typeof marketplace.name === 'string' && marketplace.name.includes(oldName)) {
-        const before = marketplace.name;
-        const after = rename(before);
-        if (after !== before) {
-          marketplace.name = after;
-          changed.push(`marketplace name: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
-        }
+      if (typeof marketplace.name === 'string' && marketplace.name !== expectedName) {
+        changed.push(`marketplace name: ${JSON.stringify(marketplace.name)} -> ${JSON.stringify(expectedName)}`);
+        marketplace.name = expectedName;
       }
-      if (
-        marketplace.interface && typeof marketplace.interface === 'object' &&
-        typeof marketplace.interface.displayName === 'string' && marketplace.interface.displayName.includes(oldName)
-      ) {
-        const before = marketplace.interface.displayName;
-        const after = rename(before);
-        if (after !== before) {
-          marketplace.interface.displayName = after;
-          changed.push(`marketplace interface.displayName: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
-        }
+      // acplugin has no source concept for interface.displayName (Claude's
+      // marketplace.json carries no `interface` field at all) - it always
+      // defaults this to match marketplace.name, so the same expected
+      // value applies here too.
+      if (marketplace.interface && typeof marketplace.interface === 'object' && marketplace.interface.displayName !== expectedName) {
+        changed.push(`marketplace interface.displayName: ${JSON.stringify(marketplace.interface.displayName)} -> ${JSON.stringify(expectedName)}`);
+        marketplace.interface.displayName = expectedName;
       }
     }
   }

@@ -95,6 +95,7 @@ jobs:
           node codex-plugins/tools/reconcile-marketplace-manifest.mjs \
             scratch/.codex-plugin/plugin.json \
             scratch/.agents/plugins/marketplace.json \
+            claude-plugins/.claude-plugin/marketplace.json \
             suqo-claude-plugins --rename-to suqo-codex-plugins
 
       - name: Assemble the expected repo layout from the conversion output
