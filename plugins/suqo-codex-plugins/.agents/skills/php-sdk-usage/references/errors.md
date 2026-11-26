@@ -28,6 +28,7 @@ use Suqo\Exception\CancelledError;
 use Suqo\Exception\KycRequiredError;
 use Suqo\Exception\NetworkError;
 use Suqo\Exception\NotFoundError;
+use Suqo\Exception\PermissionDeniedError;
 use Suqo\Exception\RateLimitError;
 use Suqo\Exception\ServerError;
 use Suqo\Exception\SuqoError;
@@ -43,6 +44,9 @@ try {
     // Merchant onboarding, not the buyer's problem.
     $this->alertOps('SUQO KYC required: ' . $e->kycStatus);
     return $this->serviceUnavailable();                      // 503
+} catch (PermissionDeniedError $e) {
+    // Valid key, but this account may not use this endpoint.
+    return $this->forbidden();                               // 403
 } catch (AuthenticationError $e) {
     // Our credentials, not the caller's. Never leak this outward.
     $this->alertOps('SUQO auth failed req=' . $e->requestId);
@@ -95,15 +99,31 @@ order.
 whose body is `{"detail": "…"}` gives an empty `fieldErrors` and that string as
 the message.
 
+`payouts->create()` reports its illegal-state reasons this same way but keyed
+on a literal `code` field rather than a real form field —
+`$e->fieldErrors['code'][0]` names the reason
+(`pending_payout_request_exists`, `bank_account_not_verified`, etc. — see
+`payouts.md`). `bankAccounts->create()`/`->delete()` and `byop->*` use the same
+`code` convention for their own illegal-state reasons.
+
+A plan change that **cannot** happen (`subscriptions->changePreview()` /
+`->change()`) is the one documented case with no dedicated exception at all:
+it answers **422**, which no type in the hierarchy above maps specifically, so
+it surfaces as a base `SuqoError` (concretely `ServerError`) whose `status` is
+`422` and whose message is the server's `detail`. Check `$e->status === 422`
+if a handler needs to distinguish it from an ordinary 5xx.
+
 ## `KycRequiredError` — and the 403 that is not one
 
 `kycStatus` is the wire field `status_code`, renamed because it sits next to the
 HTTP status and means something else. The raw body still says `status_code`.
 
-A 403 whose body is **not** KYC-shaped (both `status_code` and `message`,
-both strings) yields a bare `SuqoError` with the message
-`Unexpected status 403.` — so if you are catching only `KycRequiredError` and
-seeing nothing, that is why. Catch `SuqoError` too.
+A 403 whose body is **not** KYC-shaped yields `PermissionDeniedError` — a plain
+"not authorized for this endpoint" with the server's `detail` on `rawBody`,
+rather than a bare `SuqoError` with the message discarded. Catch it alongside
+`KycRequiredError` if a task's 403s can come from either path (`customers`
+operations, for instance, raise `PermissionDeniedError` for an account not
+permitted on that endpoint, not `KycRequiredError`).
 
 ## `RateLimitError`
 
@@ -136,9 +156,11 @@ deliberately distinct from the `NetworkError` a timeout produces. Treat it as
 
 ## `NotImplementedError`
 
-Every `$suqo->customers` method. `status` is `0`, nothing was sent. If a task
-needs customer data, say the SDK does not expose it rather than working around
-it — see the customers section of `api-surface.md`.
+Declared for a resource added to the client's shape ahead of its operations.
+**Nothing raises it today** — `Customers`, the resource it was introduced for,
+is fully implemented (`list`, `autoPaging`, `read`, `create`, `update`). Do not
+write a handler expecting it from a documented method; if a future resource is
+added ahead of its operations, this is the type it would use.
 
 ## Retry rules, stated once
 

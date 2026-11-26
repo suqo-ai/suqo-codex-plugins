@@ -1,7 +1,8 @@
 # Subscriptions
 
-Five operations: `list`, `autoPaging`, `create`, `cancel`,
-`updateBillingCycle`. Signatures in `api-surface.md`.
+Ten operations: `list`, `autoPaging`, `create`, `read`, `cancel`, `resume`,
+`renew`, `updateBillingCycle`, `changePreview`, `change`. Signatures in
+`api-surface.md`.
 
 ## The checkout flow
 
@@ -179,7 +180,127 @@ No request body is sent and no `Content-Type` header is set. A 404 means the id
 is unknown to **this environment** — a live id against a test key looks exactly
 like a missing one.
 
-There is no `resume()`. Do not offer an "undo cancel" flow through this SDK.
+## Reading one subscription
+
+```php
+$subscription = $suqo->subscriptions->read('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+```
+
+There is still no server-side filter or search parameter on `list()` — `read()`
+is the way to fetch one subscription by id directly instead of scanning
+`autoPaging()` for it. Throws `NotFoundError` on 404, same environment caveat
+as `cancel()`.
+
+## Resuming
+
+```php
+$result = $suqo->subscriptions->resume('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+
+echo $result->message;
+```
+
+Undoes a scheduled cancellation and returns the subscription to active. An
+already-active subscription is returned unchanged, so this is safe to retry by
+hand. A subscription that is already fully cancelled cannot be resumed — that
+is a 400 with a bare list of messages, surfaced as the message on a
+`ValidationError`. No request body is sent, same as `cancel()`.
+
+## Renewing
+
+```php
+use Suqo\Model\CheckoutSession;
+
+$session = $suqo->subscriptions->renew('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+
+echo $session->checkoutUrl, PHP_EOL;   // send this to the buyer
+```
+
+Opens a checkout session for the next payment on one of your own
+subscriptions, reusing its existing customer and billing period rather than
+resubmitting them. Returns a `CheckoutSession` (`publicId`, `expiresAt`,
+`checkoutUrl`) — see `checkout-sessions.md`.
+
+Takes the subscription id as a plain string, like `cancel()` and `resume()`,
+not a params object — the id travels in the body, not the path, and the route
+is the singular `/subscription/renew/`. A cancelled or archived subscription,
+and a paid one-time purchase, cannot be renewed.
+
+Nothing on the `Subscription` record says whether it recurs: match
+`$subscription->product->pbpId` against `products->list()` and read that
+billing period's `intervalType` — `one_time` means the subscription can be
+neither cancelled, resumed nor rescheduled.
+
+## Changing the plan
+
+```php
+use Suqo\Params\PlanChangeParams;
+
+$quote = $suqo->subscriptions->changePreview(
+    '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    PlanChangeParams::billingPeriod('pbp_7h2m4q'),
+);
+
+echo $quote->type, ' ', $quote->amountDue, ' NPR, expires ', $quote->newExpiryDate, PHP_EOL;
+
+// Happy with the quote — apply the identical change.
+$result = $suqo->subscriptions->change(
+    '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    PlanChangeParams::billingPeriod('pbp_7h2m4q'),
+);
+
+if ($result->checkoutUrl !== null) {
+    echo 'collect ', $result->amountDue, ' NPR at ', $result->checkoutUrl, PHP_EOL;
+}
+```
+
+`changePreview()` quotes what moving onto another price would cost — it
+**changes nothing**. `change()` takes identical parameters and applies the
+move. Both return the same `Suqo\Model\PlanChangeQuote`.
+
+The target is **either** one of your own prices, or an inline one you set
+here — never a mix, same rule as a checkout item — via `PlanChangeParams`'s two
+named constructors:
+
+```php
+PlanChangeParams::billingPeriod('pbp_7h2m4q');
+
+PlanChangeParams::inline(
+    name: 'Pro custom',
+    amount: '1500',                      // decimal string, minimum 50
+    intervalType: Suqo\IntervalType::Month,
+    intervalCount: 1,                    // one_time is refused here
+);
+```
+
+Moving onto an inline price **detaches the subscription from its product**,
+and VAT is added to the amount from your account's settings.
+
+`PlanChangeQuote`: `type` (`upgrade`, `downgrade` or `lateral` — same daily
+cost, nothing owed, expiry unchanged), `basis` (`last_payment`, or
+`current_price` when no payment record was found), `currentDailyRate` /
+`newDailyRate` (decimal strings, four places), `remainingDays` (`?int`),
+`amountDue` (`?int`, whole NPR with VAT inside, non-zero only on an upgrade,
+minimum 50), `daysAdded` (`?int`, what a downgrade or a minimum-charge upgrade
+adds), `newExpiryDate` (`Y-m-d`), `checkoutSessionId` / `checkoutUrl`.
+
+- **A downgrade or a free switch applies now** (via `change()`):
+  `checkoutSessionId` and `checkoutUrl` stay `null`.
+- **An upgrade returns a checkout.** Send `checkoutUrl` to the buyer; the plan
+  switches once they pay, and the link expires after 30 minutes. If the
+  subscription is cancelled, expires or changes plan before the payment
+  settles, or a payment already taken leaves the plan as it is, the link stops
+  accepting payment.
+
+**Throws** `ValidationError` on 400 (an inline field beside a `pbp_id`, a
+missing inline field, an amount under 50, an interval out of range or
+`one_time`), `NotFoundError` on 404 (the subscription, or a `pbp_id` that is
+not yours). A plan that **cannot** change (the same price, expired, unpaid,
+cancelled, the target unavailable, or a change payment already pending)
+answers **422** — no dedicated exception class, so it surfaces as a base
+`SuqoError` (concretely `ServerError`) whose `status` is `422` and whose
+message is the server's `detail`. Neither method is retried — both are
+writes, and a second `change()` while an upgrade payment is pending also
+answers 422.
 
 ## Moving the billing cycle
 
