@@ -29,7 +29,8 @@ composer require suqo/sdk-php
    writing from scratch.
 4. **Write against documented methods only.** If a reference does not cover
    something, say so — do not invent a method, parameter or property. The
-   surface is small and closed: nine callable operations, three of which throw.
+   surface is closed — every operation is listed in the table below. If it is
+   not there, it does not exist.
 5. **Verify** — `php -l` every file written, then run the project's own test or
    lint command. If the project has a sandbox key available, exercise the code
    for real; otherwise say plainly that it was not run against the API.
@@ -44,14 +45,49 @@ composer require suqo/sdk-php
 | `$suqo->subscriptions->list(...)` | `SubscriptionPage` |
 | `$suqo->subscriptions->autoPaging(...)` | `Generator<int, Subscription>` |
 | `$suqo->subscriptions->create(CreateSubscriptionParams, cancellation:)` | `CreateSubscriptionResponse` |
+| `$suqo->subscriptions->read(string $id, cancellation:)` | `Subscription` |
 | `$suqo->subscriptions->cancel(string $id, cancellation:)` | `MessageResponse` |
+| `$suqo->subscriptions->resume(string $id, cancellation:)` | `MessageResponse` |
+| `$suqo->subscriptions->renew(string $subscriptionId, cancellation:)` | `CheckoutSession` |
 | `$suqo->subscriptions->updateBillingCycle(UpdateBillingCycleParams, cancellation:)` | `MessageResponse` |
+| `$suqo->subscriptions->changePreview(string $id, PlanChangeParams, cancellation:)` | `PlanChangeQuote` |
+| `$suqo->subscriptions->change(string $id, PlanChangeParams, cancellation:)` | `PlanChangeQuote` |
+| `$suqo->customers->list(...)` / `->autoPaging(...)` | `Page<Customer>` / `Generator<int, Customer>` |
+| `$suqo->customers->read(string $id, cancellation:)` | `Customer` |
+| `$suqo->customers->create(CustomerCreateParams, cancellation:)` | `Customer` |
+| `$suqo->customers->update(string $id, CustomerUpdateParams, cancellation:)` | `Customer` |
+| `$suqo->checkoutSessions->create(CreateCheckoutSessionParams, cancellation:)` | `CheckoutSession` |
+| `$suqo->checkoutSessions->read(string $id, cancellation:)` | `CheckoutSessionDetail` |
+| `$suqo->webhooks->list(cancellation:)` | `list<WebhookEndpoint>` |
+| `$suqo->webhooks->create(WebhookParams, cancellation:)` | `WebhookEndpoint` |
+| `$suqo->webhooks->read(string $id, cancellation:)` | `WebhookEndpoint` |
+| `$suqo->webhooks->replace(string $id, WebhookParams, cancellation:)` | `WebhookEndpoint` |
+| `$suqo->webhooks->update(string $id, WebhookUpdateParams, cancellation:)` | `WebhookEndpoint` |
+| `$suqo->webhooks->delete(string $id, cancellation:)` | `void` |
+| `$suqo->webhooks->secret(cancellation:)` | `SigningSecret` |
+| `$suqo->webhooks->testDelivery(string $id, cancellation:)` | `DetailResponse` |
 | `Webhook::verify(...)` / `SuqoClient::verifyWebhook(...)` | `bool` |
-| `$suqo->customers->list()` / `->autoPaging()` / `->read($id)` | **throws `NotImplementedError`** |
+| `$suqo->payouts->list(...)` / `->autoPaging(...)` | `Page<Payout>` / `Generator<int, Payout>` |
+| `$suqo->payouts->create(cancellation:)` | `Payout` |
+| `$suqo->payouts->read(string $id, cancellation:)` | `Payout` |
+| `$suqo->bankAccounts->list(cancellation:)` | `list<BankAccount>` |
+| `$suqo->bankAccounts->create(BankAccountParams, cancellation:)` | `BankAccount` |
+| `$suqo->bankAccounts->read(int $id, cancellation:)` | `BankAccount` |
+| `$suqo->bankAccounts->update(int $id, BankAccountUpdateParams, cancellation:)` | `BankAccount` |
+| `$suqo->bankAccounts->delete(int $id, cancellation:)` | `void` |
+| `$suqo->bankAccounts->sendOtp(int $id, cancellation:)` | `DetailResponse` |
+| `$suqo->byop->paymentMethods(cancellation:)` | `list<PaymentMethod>` |
+| `$suqo->byop->updateCredentials(string $paymentTypeId, ByopCredentialsParams, cancellation:)` | `DetailResponse` |
+| `$suqo->byop->updateFee(string $paymentTypeId, ByopFeeParams, cancellation:)` | `ByopFee` |
 
-There is no `subscriptions->retrieve()`, no `resume()`, and no working customers
-resource. Those operations exist in the API but are deliberately not exposed;
-never write a call to them.
+`$suqo->webhooks` (management — registering and editing the endpoints SUQO
+delivers to) is unrelated to `Webhook::verify()` (verifying an inbound
+delivery; no client, no network). They meet at `webhooks->secret()`, whose
+`signingSecret` is what `verify()` takes.
+
+Sub-sellers are deliberately not exposed: `GET /sub-sellers/`,
+`POST /sub-sellers/registration/`, `PATCH /sub-sellers/{usr_id}/kyc-resubmit/`
+and the `Suqo-Account` header have no SDK call. Never write one.
 
 ## Rules that trip people up
 
@@ -145,9 +181,14 @@ Exact check order, the signed-payload format, the fixed 60 s forward skew and a
 | --- | --- |
 | `references/api-surface.md` | Writing any SDK call — exact signatures, returns, throws. Load first. |
 | `references/client-setup.md` | Constructing the client, env vars, timeouts, DI in Laravel/Symfony/Slim, injecting an HTTP client. |
-| `references/subscriptions.md` | Create, cancel, billing-cycle flows; params objects and their wire keys. |
+| `references/subscriptions.md` | Create, read, cancel, resume, renew, change plan, billing-cycle flows; params objects and their wire keys. |
 | `references/products.md` | Listing products and plans, pagination, auto-paging, cancellation tokens. |
-| `references/webhooks.md` | Verification semantics, edge cases, diagnosing a `false`, what the SDK does not provide. |
+| `references/customers.md` | Listing, reading, creating and updating customer records; the upsert semantics of `create`. |
+| `references/checkout-sessions.md` | Standalone checkout sessions — items, billing-period vs. inline lines, reading a session back. |
+| `references/webhooks.md` | Verification semantics, edge cases, diagnosing a `false`, what the SDK does not provide, plus managing registered endpoints. |
+| `references/payouts.md` | Requesting and tracking payouts of due transactions to your bank account. |
+| `references/bank-accounts.md` | Registering, verifying (OTP) and editing the bank account payouts are paid to. |
+| `references/byop.md` | Bring-your-own-payment — listing payment methods, saving gateway credentials, setting a processing fee. |
 | `references/errors.md` | Mapping SUQO failures onto HTTP responses, field errors, KYC, retries. |
 | `references/models.md` | Property names and types on every response record. |
 

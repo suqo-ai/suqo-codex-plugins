@@ -1,5 +1,10 @@
 # Webhooks — verification semantics, exactly
 
+This file is mostly about `Suqo\Webhook::verify()` — verifying an inbound
+delivery once it arrives. For **registering and editing** the endpoints SUQO
+delivers to (`$suqo->webhooks`, a client resource, unrelated to `verify()`),
+see "Managing webhook endpoints" near the end of this file.
+
 ## Signature
 
 ```php
@@ -94,3 +99,68 @@ Do not invent any of this — if a task needs it, say it is not in the SDK.
   verification-only handler needs no API key at all.
 - A verified webhook proves the sender, not the intent. Re-check state against
   your own records before acting on a field in the payload.
+
+## Managing webhook endpoints (`$suqo->webhooks`)
+
+A **client resource** — needs an `SuqoClient`, a network call, every call
+retried or not exactly like any other resource method. This is unrelated to
+`Webhook::verify()` above; the two meet only at `secret()`, whose
+`signingSecret` is the value `verify()`'s `secret:` parameter takes.
+
+Eight operations: `list`, `create`, `read`, `replace`, `update`, `delete`,
+`secret`, `testDelivery`. Signatures in `api-surface.md`.
+
+```php
+use Suqo\Model\WebhookEvent;
+use Suqo\Params\WebhookParams;
+
+$endpoint = $suqo->webhooks->create(new WebhookParams(
+    event: WebhookEvent::CheckoutSucceeded,
+    endpointUrl: 'https://example.com/webhooks/suqo',
+));
+
+echo $endpoint->id, PHP_EOL;   // whk_…
+```
+
+An account holds **at most one webhook per event**. The endpoint must use
+`https` and must resolve only to public addresses — every address the
+hostname answers with is checked, so a host with both a public and a loopback
+record is refused. Delivery re-runs the same check, because DNS can be
+re-pointed after creation passes.
+
+```php
+$secret = $suqo->webhooks->secret();
+
+// Feed this straight to Webhook::verify() above.
+$verified = Suqo\Webhook::verify(
+    rawBody: $raw,
+    signature: $sigHeader,
+    timestamp: $tsHeader,
+    secret: $secret->signingSecret,
+);
+```
+
+The secret is **minted on first read** and is not rotatable through this API.
+Treat it like any other credential: store it, do not log it.
+
+`list()` is the one unpaginated collection on the whole API — a bare array,
+not a `Page`, and nothing to `autoPaging()` over.
+
+`replace()` (PUT) is a whole-record overwrite: both `event` and `endpointUrl`
+are required, and a field you leave off `WebhookParams` is not preserved.
+`update()` (PATCH) is the one-field change — pausing deliveries without
+deleting the subscription is `new WebhookUpdateParams(isActive: false)`, a
+body of exactly `{"is_active": false}`.
+
+```php
+// Pause, don't delete.
+$suqo->webhooks->update($endpoint->id, new Suqo\Params\WebhookUpdateParams(isActive: false));
+```
+
+`testDelivery()` enqueues a signed payload and returns as soon as the job is
+queued (202, `DetailResponse`). The delivery itself is asynchronous — a
+successful call says nothing about whether your receiver actually accepted it;
+check your own logs or `verify()`'s result to confirm.
+
+`delete()` answers 204 with no body; past delivery records are kept for
+debugging regardless.

@@ -9,7 +9,9 @@ $suqo = new SuqoClient();     // api key from $SUQO_API_KEY
 ```
 
 Construction makes no network request. It resolves and validates config, then
-builds the transport and the three resources.
+builds the transport and every resource (`products`, `subscriptions`,
+`customers`, `checkoutSessions`, `webhooks`, `payouts`, `bankAccounts`,
+`byop`).
 
 ## Options
 

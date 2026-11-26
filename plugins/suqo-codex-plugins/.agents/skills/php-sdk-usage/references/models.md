@@ -46,9 +46,26 @@ numeric string.
 | `SubscriptionCustomerBilling` | `businessName`, `email`, `address`, `panVat` |
 | `SubscriptionCustomerShipping` | `phone`, `fullName`, `email`, `address` |
 | `SubscriptionProduct` | `productId`, `name`, `planName`, `pbpId`, `label`, `price` **str-decimal**, `currency` |
-| `Customer` | `id` (`?int`), `buyerPhone`, `buyerEmail`, `fullName`, `createdAt` — nothing returns one yet |
+| `Customer` | `id` (`?string`, a `cus_…` public id), `buyerPhone`, `buyerEmail`, `fullName`, `address`, `createdAt`. Returned by `customers->list()`/`->read()`/`->create()`/`->update()` |
 | `CreateSubscriptionResponse` | `pbpId`, `returnUrl`, `customer` (`?Params\CustomerInput` — the **write** shape read back) |
 | `MessageResponse` | `message` (`string`, non-null, `''` when absent) |
+| `CheckoutSession` | `publicId`, `expiresAt`, `checkoutUrl` — the 201 of `checkoutSessions->create()` and `subscriptions->renew()` |
+| `CheckoutSessionDetail` | `publicId`, `lineItems` (untyped `array`, kept exactly as received), `customerId`, `sellerDetails` (`?CheckoutSeller`), `returnUrl`, `expiresAt`, `completedAt`, `isExpired` (`?bool`) |
+| `CheckoutSeller` | `id`, `phone`, `businessLogo`, `businessName` |
+| `WebhookEndpoint` | `id`, `event` (`WebhookEvent\|string\|null`), `endpointUrl`, `isActive` (`?bool`), `createdAt` |
+| `SigningSecret` | `signingSecret` (`string`, non-null) |
+| `DetailResponse` | `detail` (`string`, non-null) |
+| `PlanChangeQuote` | `type` (`upgrade`/`downgrade`/`lateral`), `basis` (`last_payment`/`current_price`), `currentDailyRate` / `newDailyRate` **str-decimal**, `remainingDays` / `amountDue` / `daysAdded` (`?int`), `newExpiryDate`, `checkoutSessionId`, `checkoutUrl` — the last two set only by `change()` on an upgrade |
+| `Payout` | `payoutId` (a `PYT-…` public id), `status` (`PENDING`/`COMPLETED`), `amount` / `providerCharge` / `suqoPlatformFee` / `smsCharge` / `netAmount` **str-decimal, 3 places**, `requestedDate`, `paidDate`, `receiptUrl` |
+| `BankAccount` | `id` (`?int` — the one non-prefixed, non-UUID id in the API), `bankName`, `accountName`, `branch`, `accountNumberMasked`, `verifiedAt`, `createdAt`, `updatedAt` |
+| `PaymentMethod` | `companyId`, `paymentTypeId` (UUID), `paymentType`, `alias`, `logo`, `order` (`?int`), `isActive` / `isConfigured` / `isVerified` (`?bool`), `fee` **str-decimal, nullable** |
+| `ByopFee` | `processingFee` **str-decimal, nullable** |
+
+`Customer::$id` is a prefixed public id (`cus_0390b1820`) — not an integer and
+not a UUID, unlike the subscription ids elsewhere in the API. It is a
+different shape from the `customer` embedded on a subscription
+(`SubscriptionCustomer`, which has no `id` at all); the two describe a buyer
+but are never conflated.
 
 Unless marked otherwise, every property is `?string` and every wire key is the
 snake_case form of the name.
@@ -102,6 +119,24 @@ public static function parse(mixed $value): self|string|null
 A recognised value as a case; an unrecognised one as the raw string; absent or
 non-string as `null`. Narrow with `instanceof` before `match` — see
 `subscriptions.md`.
+
+## `IntervalType` and `WebhookEvent`
+
+Same tolerant-read shape as `SubscriptionStatus`, each with its own
+`parse(mixed $value): self|string|null`.
+
+`IntervalType`: `Day`, `Week`, `Month`, `Year`, `OneTime` (`one_time`). A
+billing period's cadence. `BillingPeriod::$intervalType` is kept a plain
+`?string` — retyping a published property would be breaking — so pass it
+through `IntervalType::parse()` if you want a case to match on. The enum
+itself is for the write side, `CheckoutItem::inline()`.
+
+`WebhookEvent`: `CheckoutSucceeded` (`checkout.succeeded`), `CheckoutFailed`
+(`checkout.failed`), `SubscriptionStatusChanged`
+(`subscription.status_changed`), `ApiKeyCreated` (`api_key.created`),
+`ApiKeyDeleted` (`api_key.deleted`), `ApiKeyExpiringSoon`
+(`api_key.expiring_soon`), `ApiKeyExpired` (`api_key.expired`).
+`WebhookEndpoint::$event` is `WebhookEvent|string|null` — same narrowing rule.
 
 ## Persisting a record
 
